@@ -5,29 +5,34 @@ import DISTRIBUTOR_ABI from './abi/distributor.json'
 import { AbiItem } from 'web3-utils'
 dotenv.config()
 
-export const ethClient = new Web3(process.env.RPC_URL ? process.env.RPC_URL : process.exit(1))
+interface SignedTransaction{
+    rawTransaction?: string
+}
+
+let startBlock:number = 0
+
+const l2Client = new Web3(process.env.L2_RPC ? process.env.L2_RPC : process.exit(1))
+const l1Client = new Web3(process.env.L1_RPC ? process.env.L1_RPC : process.exit(1))
 const DISTRIBUTOR_ADDY = process.env.DISTRIBUTOR_ADDRESS ? process.env.DISTRIBUTOR_ADDRESS : process.exit(1)
-export const distributor = new ethClient.eth.Contract(DISTRIBUTOR_ABI as AbiItem[], DISTRIBUTOR_ADDY)
+const distributor = new l2Client.eth.Contract(DISTRIBUTOR_ABI as AbiItem[], DISTRIBUTOR_ADDY)
 
 async function getNonce(privateKey: string){
-    const address = ethClient.eth.accounts.privateKeyToAccount(privateKey)
-    const nonce = await ethClient.eth.getTransactionCount(address.address)
+    const address = l2Client.eth.accounts.privateKeyToAccount(privateKey)
+    const nonce = await l2Client.eth.getTransactionCount(address.address)
     return nonce
 }
 
-async function main(){
-    console.log('Starting bot..')
-    // Load claim start
-    const claimStartTimestamp = await distributor.methods.claimPeriodStart().call()
-    while(Date.now() < claimStartTimestamp * 1000) console.log(`Remaining time: ${claimStartTimestamp * 1000 - Date.now()}`)
+
+
+async function prepareTxs(){
     // calculate current gas 
-    const gasPrice = await ethClient.eth.getGasPrice()
-    // generate calldata
-    const claimData = distributor.methods.claim()
+    const gasPrice = await l2Client.eth.getGasPrice()
+    // generate calldata for claim
+    const claimData = distributor.methods.claim()    
     // encode & sign tx
-    const signedQuery = secrets.map(async privateKey => {
+    let signedQuery = secrets.map(async privateKey => {
         const nonce = await getNonce(privateKey)
-        return ethClient.eth.accounts.signTransaction({
+        return l2Client.eth.accounts.signTransaction({
             to: DISTRIBUTOR_ADDY,
             data: claimData.encodeABI(),
             nonce,
@@ -35,8 +40,11 @@ async function main(){
             gas: '1000000'
         }, privateKey)
     })
-    const signedClaims = await Promise.all(signedQuery)
-    const sendClaims = signedClaims.map(c => c.rawTransaction ? ethClient.eth.sendSignedTransaction(c.rawTransaction) : undefined)
+    return await Promise.all(signedQuery)
+}
+
+async function startClaims(signedClaims: SignedTransaction[]){
+    let sendClaims = signedClaims.map(c => c.rawTransaction ? l2Client.eth.sendSignedTransaction(c.rawTransaction) : undefined)
     sendClaims.forEach((tx, index) => {
         tx?.on('transactionHash', txhash => {
             console.log(`Account ${index}: Tx sent > ${txhash}`)
@@ -50,6 +58,19 @@ async function main(){
     })
     // send txs
     await Promise.all(signedClaims)
+}
+
+async function main(){
+    console.log('Starting bot..')
+    // Load claim start
+    startBlock = await distributor.methods.claimPeriodStart().call()
+    // Load tx data
+    const signedClaims = await prepareTxs()
+    // IF YOU ARE A DEV I STRONGLY RECOMMEND USING WEBSOCKET SUBSCRIPTION INSTEAD
+    // OF THIS WORKAROUND, I DID THIS BCS MOST PEOPLE DONT HAVE ACCESS TO WS
+    let l1Block
+    while((l1Block = await l1Client.eth.getBlockNumber()) < startBlock) console.log(`Blocks left: ${startBlock - l1Block}`)
+    startClaims(signedClaims)
 }
 
 main()
