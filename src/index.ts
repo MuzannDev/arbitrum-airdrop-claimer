@@ -8,7 +8,6 @@ const rl = readline.createInterface({ input, output });
 
 dotenv.config()
 
-let startBlock:number = 0
 export let gasPrice:string
 export let DISTRIBUTOR_ADDRESS:string
 export let TOKEN_ADDRESS:string
@@ -22,13 +21,14 @@ async function main(){
     rl.close()
     if (userInput === 'NORMAL'){
         gasPrice = (parseInt(await l2Client.eth.getGasPrice()) * 2).toString()
+        const startBlock = await distributor.methods.claimPeriodStart().call()
         TOKEN_ADDRESS = process.env.TOKEN_NORMAL_ADDRESS ? process.env.TOKEN_NORMAL_ADDRESS : handleError('Missing TOKEN_NORMAL_ADDRESS env variable')
         DISTRIBUTOR_ADDRESS = process.env.DISTRIBUTOR_NORMAL_ADDRESS ? process.env.DISTRIBUTOR_NORMAL_ADDRESS : handleError('Missing DISTRIBUTOR_NORMAL_ADDRESS env variable')
         const signedClaims = await prepareClaims(DISTRIBUTOR_ADDRESS)
         let l1Block
         // IF YOU ARE A DEV I STRONGLY RECOMMEND USING WEBSOCKET SUBSCRIPTION INSTEAD
         // OF THIS WORKAROUND, I DID THIS BCS MOST PEOPLE DONT HAVE ACCESS TO WS
-        while((l1Block = await getCurrentL1Block()) < startBlock) console.log(`${Date.now()} - Blocks left: ${startBlock - l1Block}`)
+        while((l1Block = await getCurrentL1Block()) < startBlock) console.log(`${new Date().toLocaleTimeString()} - Blocks left: ${startBlock - l1Block}`)
         handleClaims(signedClaims)
     }
     else if (userInput === 'TEST'){
