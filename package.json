@@ -13,10 +13,17 @@
   "license": "ISC",
   "dependencies": {
     "dotenv": "^16.0.3",
+    "inquirer": "^9.1.5",
+    "prompt-sync": "^4.2.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.0.2",
     "web3": "^1.8.2",
+    "web3-core-promievent": "^1.9.0",
     "web3-eth-contract": "^1.9.0",
     "web3-utils": "^1.9.0"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.3",
+    "@types/prompt-sync": "^4.2.0"
   }
 }
